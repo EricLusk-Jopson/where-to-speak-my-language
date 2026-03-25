@@ -47,7 +47,7 @@ export function WorldMap({ selectedLanguages }: Props) {
 
   // Load and project geo data
   useEffect(() => {
-    import("world-atlas/countries-110m.json").then((mod) => {
+    import("world-atlas/countries-50m.json").then((mod) => {
       const topo = mod.default as unknown as Topology;
       const { width, height } = dimensions;
       const projection = geoNaturalEarth1()
