@@ -59,7 +59,9 @@ export function WorldMap({ selectedLanguages }: Props) {
         topo.objects.countries as GeometryCollection
       );
       const computed = (geojson.features as GeoJSON.Feature[]).map((geo) => {
-        const id = String((geo as { id?: unknown }).id ?? "");
+        const rawId = String((geo as { id?: unknown }).id ?? "");
+        // world-atlas stores IDs as zero-padded strings ("004"), mapping uses plain integers ("4")
+        const id = String(parseInt(rawId, 10));
         const alpha2 = numericToAlpha2[id] ?? "";
         return {
           id,
