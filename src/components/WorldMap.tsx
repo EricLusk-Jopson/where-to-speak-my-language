@@ -17,9 +17,21 @@ interface TooltipState {
   matchedLanguages: string[];
 }
 
+const DOT_AREA_THRESHOLD = 20; // px² — features smaller than this get a dot marker
+const DOT_RADIUS = 4;
+
+interface CountryFeature {
+  id: string;
+  alpha2: string;
+  d: string;
+  cx: number;
+  cy: number;
+  isDot: boolean;
+}
+
 export function WorldMap({ selectedLanguages }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [paths, setPaths] = useState<{ id: string; d: string; alpha2: string }[]>([]);
+  const [features, setFeatures] = useState<CountryFeature[]>([]);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 450 });
 
@@ -63,18 +75,24 @@ export function WorldMap({ selectedLanguages }: Props) {
         // world-atlas stores IDs as zero-padded strings ("004"), mapping uses plain integers ("4")
         const id = String(parseInt(rawId, 10));
         const alpha2 = numericToAlpha2[id] ?? "";
+        const geoArg = geo as Parameters<typeof pathGenerator>[0];
+        const area = pathGenerator.area(geoArg);
+        const [cx, cy] = pathGenerator.centroid(geoArg);
         return {
           id,
           alpha2,
-          d: pathGenerator(geo as Parameters<typeof pathGenerator>[0]) ?? "",
+          d: pathGenerator(geoArg) ?? "",
+          cx: cx ?? 0,
+          cy: cy ?? 0,
+          isDot: area < DOT_AREA_THRESHOLD,
         };
       });
-      setPaths(computed);
+      setFeatures(computed);
     });
   }, [dimensions]);
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGPathElement>, alpha2: string) => {
+  const makeTooltipData = useCallback(
+    (e: React.MouseEvent<SVGElement>, alpha2: string) => {
       const svg = svgRef.current;
       if (!svg) return;
       const rect = svg.getBoundingClientRect();
@@ -102,28 +120,48 @@ export function WorldMap({ selectedLanguages }: Props) {
         preserveAspectRatio="xMidYMid meet"
         style={{ display: "block" }}
       >
-        {paths.map(({ id, d, alpha2 }) => {
+        {features.map(({ id, d, alpha2, cx, cy, isDot }) => {
           const isHighlighted = highlightedCountries.has(alpha2);
           const hasData = !!countries[alpha2 as keyof typeof countries];
+          const fill = isHighlighted ? "#14b8a6" : hasData ? "#334155" : "#1e293b";
+          const handlers = hasData
+            ? {
+                onMouseMove: (e: React.MouseEvent<SVGElement>) => makeTooltipData(e, alpha2),
+                onMouseLeave: handleMouseLeave,
+              }
+            : {};
+
+          if (isDot && hasData) {
+            return (
+              <circle
+                key={id}
+                cx={cx}
+                cy={cy}
+                r={DOT_RADIUS}
+                fill={fill}
+                stroke="#0f172a"
+                strokeWidth={0.5}
+                className="cursor-pointer transition-colors duration-150"
+                style={{
+                  filter: isHighlighted ? "drop-shadow(0 0 4px rgba(20,184,166,0.6))" : undefined,
+                }}
+                {...handlers}
+              />
+            );
+          }
+
           return (
             <path
               key={id}
               d={d}
-              fill={
-                isHighlighted
-                  ? "#14b8a6"
-                  : hasData
-                  ? "#334155"
-                  : "#1e293b"
-              }
+              fill={fill}
               stroke="#0f172a"
               strokeWidth={0.5}
               className={hasData ? "cursor-pointer transition-colors duration-150" : ""}
-              onMouseMove={hasData ? (e) => handleMouseMove(e, alpha2) : undefined}
-              onMouseLeave={hasData ? handleMouseLeave : undefined}
               style={{
                 filter: isHighlighted ? "drop-shadow(0 0 4px rgba(20,184,166,0.6))" : undefined,
               }}
+              {...handlers}
             />
           );
         })}
